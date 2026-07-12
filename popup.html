@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Header Boss</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup">
+      <header class="header">
+        <div>
+          <h1>Header Boss</h1>
+          <p id="current-state" class="state">Disabled</p>
+        </div>
+        <label class="switch">
+          <input id="enabled" type="checkbox" aria-label="Enable custom headers">
+          <span class="slider"></span>
+        </label>
+      </header>
+
+      <form id="settings-form" class="form">
+        <div class="form-heading">
+          <h2>Headers</h2>
+          <button id="add-header" class="secondary-button" type="button">Add header</button>
+        </div>
+
+        <div id="headers-list" class="headers-list"></div>
+
+        <button type="submit">Save</button>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
