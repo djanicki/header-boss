@@ -23,6 +23,37 @@ function isValidHeaderValue(value) {
   return !/[\r\n]/.test(value);
 }
 
+function isValidDomainToken(token) {
+  return /^[a-zA-Z0-9.*_-]+$/.test(token);
+}
+
+function extractDomain(address) {
+  if (!address || typeof address !== "string") {
+    return "";
+  }
+
+  let cleaned = address.trim();
+  cleaned = cleaned.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "");
+  cleaned = cleaned.replace(/^[^@/]+@/, "");
+  cleaned = cleaned.replace(/[/?#].*$/, "");
+  cleaned = cleaned.replace(/:[0-9]+$/, "");
+
+  return cleaned.toLowerCase();
+}
+
+function parseTargetDomains(input) {
+  if (!input || typeof input !== "string") {
+    return ["*"];
+  }
+
+  const tokens = input
+    .split(/[\s,;]+/)
+    .map((item) => extractDomain(item))
+    .filter(Boolean);
+
+  return tokens.length ? tokens : ["*"];
+}
+
 function updateStateText() {
   currentState.textContent = enabledInput.checked ? "Enabled" : "Disabled";
 }
@@ -35,7 +66,8 @@ function setStatus(message, type = "") {
 function createEmptyHeader() {
   return {
     name: "",
-    value: ""
+    value: "",
+    domains: "*"
   };
 }
 
@@ -80,7 +112,8 @@ function renderHeaders() {
     fields.className = "header-fields";
     fields.append(
       createHeaderField("Header name", "X-Custom-Header", header.name, "name", index),
-      createHeaderField("Header value", "example", header.value, "value", index)
+      createHeaderField("Header value", "example", header.value, "value", index),
+      createHeaderField("Target domain(s)", "*", header.domains ?? "*", "domains", index)
     );
 
     const removeButton = document.createElement("button");
@@ -99,7 +132,8 @@ function normalizeHeaders(settings) {
   if (Array.isArray(settings.headers)) {
     return settings.headers.map((header) => ({
       name: String(header?.name ?? "").trim(),
-      value: String(header?.value ?? "")
+      value: String(header?.value ?? ""),
+      domains: String(header?.domains ?? "*").trim() || "*"
     }));
   }
 
@@ -112,7 +146,8 @@ function normalizeHeaders(settings) {
   return [
     {
       name: legacyName,
-      value: String(settings.headerValue ?? "")
+      value: String(settings.headerValue ?? ""),
+      domains: "*"
     }
   ];
 }
@@ -121,13 +156,14 @@ function getHeadersFromForm() {
   return Array.from(headersList.querySelectorAll(".header-row"))
     .map((row) => ({
       name: row.querySelector('[data-field="name"]').value.trim(),
-      value: row.querySelector('[data-field="value"]').value
+      value: row.querySelector('[data-field="value"]').value,
+      domains: (row.querySelector('[data-field="domains"]')?.value ?? "").trim()
     }))
-    .filter((header) => header.name || header.value);
+    .filter((header) => header.name || header.value || (header.domains && header.domains !== "*"));
 }
 
 function validateHeaders(nextHeaders) {
-  const headerNames = new Set();
+  const headerKeys = new Set();
 
   for (const [index, header] of nextHeaders.entries()) {
     const number = index + 1;
@@ -144,13 +180,39 @@ function validateHeaders(nextHeaders) {
       return `Header ${number} value cannot contain line breaks.`;
     }
 
-    const normalizedName = header.name.toLowerCase();
-
-    if (headerNames.has(normalizedName)) {
-      return `Header ${number} duplicates another header name.`;
+    if (!header.domains) {
+      return `Header ${number} needs a target domain.`;
     }
 
-    headerNames.add(normalizedName);
+    if (/[\r\n]/.test(header.domains)) {
+      return `Header ${number} target domain cannot contain line breaks.`;
+    }
+
+    const domainTokens = parseTargetDomains(header.domains);
+
+    if (!domainTokens.length) {
+      return `Header ${number} needs a target domain.`;
+    }
+
+    for (const token of domainTokens) {
+      if (!isValidDomainToken(token)) {
+        return `Header ${number} target domain contains invalid characters.`;
+      }
+    }
+
+    const normalizedName = header.name.toLowerCase();
+    const normalizedDomains = domainTokens.includes("*")
+      ? "*"
+      : Array.from(new Set(domainTokens)).sort().join(",");
+    const headerKey = `${normalizedName}:::${normalizedDomains}`;
+
+    if (headerKeys.has(headerKey)) {
+      return normalizedDomains === "*"
+        ? `Header ${number} duplicates another header name.`
+        : `Header ${number} duplicates another header name for the same domain.`;
+    }
+
+    headerKeys.add(headerKey);
   }
 
   return "";
